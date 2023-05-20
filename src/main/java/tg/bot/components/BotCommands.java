@@ -5,20 +5,19 @@ import java.util.List;
 
 public interface BotCommands {
     List<BotCommand> LIST_OF_COMMANDS = List.of(
-            new BotCommand("/start", "get a welcome message"),
-            new BotCommand("/mydata", "get your data stored"),
-            new BotCommand("/deletedata", "delete my data"),
-            new BotCommand("/help", "info how to use this bot"),
-            new BotCommand("/settings", "set your preferences")
+            new BotCommand("/mylinks", "Позволяет получить информацию по всем добавленым товарам"),
+            /*new BotCommand("/deletedata", "delete my data"),*/
+            new BotCommand("/help", "информация как пользоваться ботом")
+            /*new BotCommand("/settings", "set your preferences")*/
     );
     String HELP_TEXT = """
-            This bot is created to demonstrate Spring capabilities.
+            Этот бот позволяет автоматически получать информацию по товарам с сайта wildberries (наличие и цена).
+            Для этого необходимо отправить боту ссылку на товар.
+            Если товар имеет несколько цветов/форм необходимо выбрать цвет/форму так, как будто вы хотите положить этот товар в корзину.
+            Аналогично нужно выбрать размер (если он имеется).
+            Внимание! В мобильном приложении сначала необходимо добавить товар в избранное, затем нажать поделиться и отправить ссылку боту.
 
-            You can execute commands from the main menu on the left or by typing a command:
-
-            Type /start to see a welcome message
-
-            Type /mydata to see data stored about yourself
-
-            Type /help to see this message again""";
+            Вы можете вызвать эти команды из основного меню:
+            /mydata отобразить данные о всех добавленых товарах
+            /help отобразить эту информацию снова""";
 }

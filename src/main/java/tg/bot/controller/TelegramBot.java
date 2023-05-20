@@ -1,6 +1,7 @@
 package tg.bot.controller;
 
 import lombok.extern.slf4j.Slf4j;
+import org.json.simple.parser.ParseException;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
@@ -11,20 +12,25 @@ import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScope
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import tg.bot.components.BotCommands;
 import tg.bot.config.BotConfig;
+import tg.bot.model.Links;
+import tg.bot.model.LinksRepository;
 import tg.bot.model.User;
 import tg.bot.model.UserRepository;
 
+import java.io.IOException;
 
 @Component
 @Slf4j
 public class TelegramBot extends TelegramLongPollingBot implements BotCommands {
 
     private final UserRepository userRepository;
+    private final LinksRepository linksRepository;
     private final BotConfig config;
 
-    public TelegramBot(BotConfig config, UserRepository userRepository) {
+    public TelegramBot(BotConfig config, UserRepository userRepository, LinksRepository linksRepository) {
         this.config = config;
         this.userRepository = userRepository;
+        this.linksRepository = linksRepository;
         try {
             this.execute(new SetMyCommands(LIST_OF_COMMANDS, new BotCommandScopeDefault(), null));
         } catch (TelegramApiException e) {
@@ -44,24 +50,52 @@ public class TelegramBot extends TelegramLongPollingBot implements BotCommands {
     @Override
     public void onUpdateReceived(Update update) {
 
-
         if(update.hasMessage() && update.getMessage().hasText()){
             String messageText = update.getMessage().getText();
             long chatID = update.getMessage().getChatId();
 
             switch (messageText) {
-                case "/start":
+                case "/start" -> {
                     registerUser(update.getMessage());
                     startCommandReceived(chatID, update.getMessage().getChat().getFirstName());
-                    break;
-
-                case "/help":
-                    sendMessage(chatID, HELP_TEXT);
-                    break;
-                default:
-                    sendMessage(chatID, "Not command");
+                }
+                case "/help" -> sendMessage(chatID, HELP_TEXT);
+                case "/mydata" -> showLinks(chatID);
+                default -> {
+                    if (messageText.contains("https://wildberries.") ||
+                            messageText.contains("https://www.wildberries.")){
+                        String url = messageText.substring(messageText.indexOf("https://"));
+                        addLink(url, chatID);
+                    } else sendMessage(chatID, "Команды не существует");
+                }
             }
         }
+    }
+
+    private void showLinks(long chatID) {
+        User user = userRepository.findById(chatID).orElse(null);
+        for(Links link:user.getList()){
+            try {
+                sendMessage(chatID, Parser.parse(link.getLink()));
+            } catch (IOException | ParseException e) {
+                log.error("Error parse link: " + e.getMessage());
+            }
+        }
+    }
+
+    private void addLink(String url, Long chatID) {
+        User user = userRepository.findById(chatID).orElse(null);
+        Links link = new Links();
+        link.setLink(url);
+        link.setUser(user);
+        linksRepository.save(link);
+        sendMessage(chatID, "Ссылка добавлена");
+        try {
+            sendMessage(chatID, Parser.parse(link.getLink()));
+        } catch (IOException | ParseException e) {
+            log.error("Error parse link: " + e.getMessage());
+        }
+        log.info("saved: " + link.getLink());
     }
 
     private void registerUser(Message message) {
