@@ -6,9 +6,9 @@ import java.util.List;
 public interface BotCommands {
     List<BotCommand> LIST_OF_COMMANDS = List.of(
             new BotCommand("/mylinks", "Позволяет получить информацию по всем добавленым товарам"),
-            /*new BotCommand("/deletedata", "delete my data"),*/
-            new BotCommand("/help", "информация как пользоваться ботом")
-            /*new BotCommand("/settings", "set your preferences")*/
+            new BotCommand("/delete", "Удалить ссыку на товар"),
+            new BotCommand("/help", "Информация как пользоваться ботом"),
+            new BotCommand("/settings", "Настроить время уведомления о товарах")
     );
     String HELP_TEXT = """
             Этот бот позволяет автоматически получать информацию по товарам с сайта wildberries (наличие и цена).
@@ -18,6 +18,6 @@ public interface BotCommands {
             Внимание! В мобильном приложении сначала необходимо добавить товар в избранное, затем нажать поделиться и отправить ссылку боту.
 
             Вы можете вызвать эти команды из основного меню:
-            /mydata отобразить данные о всех добавленых товарах
+            /mylinks отобразить данные о всех добавленых товарах
             /help отобразить эту информацию снова""";
 }

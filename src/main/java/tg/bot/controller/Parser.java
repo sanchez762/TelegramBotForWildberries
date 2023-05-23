@@ -24,7 +24,7 @@ public class Parser {
         Connection.Response response= Jsoup.connect(template+idOfItem)
                 .ignoreContentType(true)
                 .userAgent("Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:25.0) Gecko/20100101 Firefox/25.0")
-                .referrer("http://www.google.com")
+                .referrer("https://www.google.com")
                 .timeout(12000)
                 .followRedirects(true)
                 .execute();

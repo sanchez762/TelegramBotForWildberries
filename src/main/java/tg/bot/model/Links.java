@@ -5,8 +5,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.net.URL;
-
 @Entity
 @Table(name = "linksTable")
 @Data

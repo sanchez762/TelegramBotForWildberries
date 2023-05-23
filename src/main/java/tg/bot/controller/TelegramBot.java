@@ -2,6 +2,7 @@ package tg.bot.controller;
 
 import lombok.extern.slf4j.Slf4j;
 import org.json.simple.parser.ParseException;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
@@ -18,11 +19,16 @@ import tg.bot.model.User;
 import tg.bot.model.UserRepository;
 
 import java.io.IOException;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.HashMap;
+import java.util.List;
 
 @Component
 @Slf4j
 public class TelegramBot extends TelegramLongPollingBot implements BotCommands {
 
+    private final HashMap<Long, String> mapOfRequest = new HashMap<>();
     private final UserRepository userRepository;
     private final LinksRepository linksRepository;
     private final BotConfig config;
@@ -34,7 +40,7 @@ public class TelegramBot extends TelegramLongPollingBot implements BotCommands {
         try {
             this.execute(new SetMyCommands(LIST_OF_COMMANDS, new BotCommandScopeDefault(), null));
         } catch (TelegramApiException e) {
-            log.error("Error setting bot's command list: " + e.getMessage());
+            log.error("Ошибка настройки команд бота: " + e.getMessage());
         }
     }
 
@@ -54,48 +60,85 @@ public class TelegramBot extends TelegramLongPollingBot implements BotCommands {
             String messageText = update.getMessage().getText();
             long chatID = update.getMessage().getChatId();
 
+            if(mapOfRequest.containsKey(chatID) && mapOfRequest.get(chatID).equals("Delete")){
+                delete(chatID, messageText);
+                return;
+            }
+            if(mapOfRequest.containsKey(chatID) && mapOfRequest.get(chatID).equals("Time")){
+                setTime(chatID, messageText);
+                return;
+            }
+
             switch (messageText) {
                 case "/start" -> {
                     registerUser(update.getMessage());
                     startCommandReceived(chatID, update.getMessage().getChat().getFirstName());
                 }
                 case "/help" -> sendMessage(chatID, HELP_TEXT);
-                case "/mydata" -> showLinks(chatID);
+                case "/delete" -> {
+                    mapOfRequest.put(chatID, "Delete");
+                    sendMessage(chatID, "Введите id товара для удаления:");
+                }
+                case "/mylinks" -> showLinks(chatID);
+                case "/settings" -> {
+                    mapOfRequest.put(chatID, "Time");
+                    sendMessage(chatID, "Введите желаемое время рассылки по московскому времени, " +
+                            "одним числом, в формате: (0-23)");
+                }
                 default -> {
                     if (messageText.contains("https://wildberries.") ||
                             messageText.contains("https://www.wildberries.")){
                         String url = messageText.substring(messageText.indexOf("https://"));
                         addLink(url, chatID);
-                    } else sendMessage(chatID, "Команды не существует");
+                    } else sendMessage(chatID, "Команда не поддерживается");
                 }
             }
         }
     }
 
+    private void setTime(long chatID, String messageText) {
+        try {
+            userRepository.setTime(chatID, Integer.parseInt(messageText));
+        } catch (NumberFormatException e) {
+            log.error("Неверно указано время");
+        }
+        mapOfRequest.remove(chatID);
+        sendMessage(chatID, "Время установлено");
+    }
+
+    private void delete(long chatID, String messageText) {
+        try {
+            linksRepository.deleteByLinkId(Long.valueOf(messageText));
+            sendMessage(chatID, "Ссылка удалена");
+        } catch (NumberFormatException e) {
+            sendMessage(chatID, "Неверный id товара, попробуйте снова");
+        }
+        mapOfRequest.remove(chatID);
+    }
+
     private void showLinks(long chatID) {
-        User user = userRepository.findById(chatID).orElse(null);
-        for(Links link:user.getList()){
+        List<Links> list = userRepository.findById(chatID).orElse(null).getList();
+        for(Links link:list){
             try {
-                sendMessage(chatID, Parser.parse(link.getLink()));
+                sendMessage(chatID, Parser.parse(link.getLink()) + "\nID для удаления: " + link.getId());
             } catch (IOException | ParseException e) {
-                log.error("Error parse link: " + e.getMessage());
+                log.error("Ошибка парсинга ссылки: " + e.getMessage());
             }
         }
     }
 
     private void addLink(String url, Long chatID) {
-        User user = userRepository.findById(chatID).orElse(null);
+        User user = userRepository.getReferenceById(chatID);
         Links link = new Links();
         link.setLink(url);
         link.setUser(user);
         linksRepository.save(link);
         sendMessage(chatID, "Ссылка добавлена");
         try {
-            sendMessage(chatID, Parser.parse(link.getLink()));
+            sendMessage(chatID, Parser.parse(url) + "\nId для удаления: " + link.getId());
         } catch (IOException | ParseException e) {
-            log.error("Error parse link: " + e.getMessage());
+            log.error("Ошибка парсинга ссылки: " + e.getMessage());
         }
-        log.info("saved: " + link.getLink());
     }
 
     private void registerUser(Message message) {
@@ -107,16 +150,16 @@ public class TelegramBot extends TelegramLongPollingBot implements BotCommands {
 
             user.setChatId(chatId);
             user.setFirstName(chat.getFirstName());
+            user.setTime(12);
 
             userRepository.save(user);
-            log.info("user saved: "+user);
+            log.info("Пользователь добавлен: "+user);
         }
     }
 
-    private void startCommandReceived(long chatId, String name) {
-        String answer = "Hi, " + name;
-        log.info("Answer to user " + name);
-        sendMessage(chatId, answer);
+    private void startCommandReceived(long chatID, String name) {
+        sendMessage(chatID, "Привет, " + name);
+        sendMessage(chatID, HELP_TEXT);
 
     }
 
@@ -128,8 +171,25 @@ public class TelegramBot extends TelegramLongPollingBot implements BotCommands {
         try{
             execute(message);
         } catch (TelegramApiException e) {
-            log.error("Error occurred: " + e.getMessage());
+            log.error("Ошибка отправки сообщения: " + e.getMessage());
         }
     }
 
+    @Scheduled(cron = "0 0 * * * *")
+    private void sendAuto(){
+        int time = ZonedDateTime.now(ZoneId.of("Europe/Moscow")).getHour();
+        var listOfUser = userRepository.findAllByTime(time);
+
+        for (User user:listOfUser) {
+
+            List<Links> list = user.getList();
+            for (Links link:list){
+                try {
+                    sendMessage(user.getChatId(), Parser.parse(link.getLink()));
+                } catch (IOException | ParseException e) {
+                    log.error("Ошибка парсинга ссылки: " + e.getMessage());
+                }
+            }
+        }
+    }
 }
